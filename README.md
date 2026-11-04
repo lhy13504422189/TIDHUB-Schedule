@@ -8,7 +8,7 @@
   <img alt="single-file" src="https://img.shields.io/badge/single--file-✓-34D399?style=flat-square">
   <img alt="zero-deps" src="https://img.shields.io/badge/zero--deps-✓-34D399?style=flat-square">
   <img alt="no-build" src="https://img.shields.io/badge/no--build-✓-34D399?style=flat-square">
-  <img alt="license" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square">
+  <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square">
 </p>
 
 ---
@@ -364,7 +364,7 @@ PC 网格列数写死在 CSS 中。搜索 `repeat(5, minmax(0, 1fr))` 和 `grid-
 
 ## License
 
-MIT License。详见 [LICENSE](LICENSE)。
+Apache License 2.0。详见 [LICENSE](LICENSE)。
 
 ---
 
@@ -372,7 +372,7 @@ MIT License。详见 [LICENSE](LICENSE)。
 
 - 玻璃拟态的视觉参考：[Apple Human Interface Guidelines — Materials](https://developer.apple.com/design/human-interface-guidelines/materials)
 - 渐变描边的实现思路：[MDN — @property](https://developer.mozilla.org/en-US/docs/Web/CSS/@property)
-- 进度条 UI 参考了 iOS 系统的细线进度指示器
+- 如果 GitPort GitHub 帮到了你，点个 Star ⭐ 就是最好的支持——它能让更多人看到这个项目。
 
 ---
 
