@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>课表编辑器</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+               "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  min-height: 100vh;
+  padding: 24px 16px 60px;
+  color: #1d1d1f;
+  font-size: 14px;
+  line-height: 1.5;
+  background:
+    radial-gradient(1200px 700px at 6% -12%, rgba(224, 232, 255, 0.9), transparent 62%),
+    radial-gradient(1000px 600px at 102% -4%, rgba(255, 230, 240, 0.85), transparent 58%),
+    radial-gradient(900px 650px at 50% 118%, rgba(226, 247, 238, 0.85), transparent 62%),
+    #f5f6f8;
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+.container { max-width: 920px; margin: 0 auto; }
+
+.card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(17, 24, 39, .07), 0 1px 2px rgba(17, 24, 39, .04);
+  margin-bottom: 16px;
+}
+
+h1 { font-size: 22px; font-weight: 700; margin-bottom: 8px; letter-spacing: .3px; }
+h2 { font-size: 17px; font-weight: 700; margin-bottom: 4px; letter-spacing: .2px; }
+
+.muted { color: #6b7280; font-size: 13px; }
+
+button {
+  appearance: none;
+  border: 0;
+  background: #1d1d1f;
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+button:hover { opacity: .85; }
+button:disabled { opacity: .4; cursor: not-allowed; }
+button.secondary { background: #f2f3f6; color: #1d1d1f; }
+button.secondary:hover { background: #e8eaee; opacity: 1; }
+button.danger { background: #fee2e2; color: #b91c1c; }
+button.danger:hover { background: #fecaca; opacity: 1; }
+button.small { padding: 5px 10px; font-size: 12px; }
+
+input[type="text"], input[type="time"], select {
+  appearance: none;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  color: #1d1d1f;
+  transition: border-color .15s;
+  width: 100%;
+}
+input:focus, select:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, .15);
+}
+
+/* 拖放区 */
+.dropzone {
+  border: 2px dashed #d1d5db;
+  border-radius: 16px;
+  padding: 60px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+  background: #fafbfc;
+}
+.dropzone:hover, .dropzone.dragover {
+  border-color: #4a90e2;
+  background: #f0f7ff;
+}
+.dropzone .icon { font-size: 40px; margin-bottom: 12px; }
+.dropzone .title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.dropzone .hint { font-size: 12px; color: #9aa0aa; }
+
+/* 顶部操作栏 */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f2f3f6;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.topbar .file-info {
+  font-size: 13px;
+  color: #6b7280;
+}
+.topbar .file-info strong { color: #1d1d1f; }
+
+/* 星期行 */
+.day-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+.day-row .day-name { font-weight: 600; min-width: 60px; }
+.day-row .actions { margin-left: auto; display: flex; gap: 4px; }
+
+/* 大节卡片 */
+.slot-card {
+  background: #f9fafb;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid #f2f3f6;
+}
+.slot-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-wrap: wrap;
+}
+.slot-header .slot-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: #1d1d1f;
+  min-width: 70px;
+}
+.slot-header label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #6b7280;
+}
+.slot-header input[type="time"] { width: 110px; padding: 6px 8px; }
+.slot-header .actions { margin-left: auto; display: flex; gap: 4px; }
+
+.course-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 0;
+}
+.course-row .day-label {
+  font-weight: 600;
+  font-size: 12.5px;
+  color: #6b7280;
+}
+
+/* 颜色行 */
+.color-row {
+  display: grid;
+  grid-template-columns: 1fr 140px;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f2f3f6;
+}
+.color-row:last-child { border-bottom: 0; }
+.color-row .course-name { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.color-swatch {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  border: 1px solid rgba(0,0,0,.06);
+}
+
+/* 导出栏 */
+.export-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.export-bar .filename {
+  flex: 1;
+  min-width: 200px;
+  max-width: 320px;
+}
+
+/* 空状态 */
+.empty-hint {
+  padding: 20px;
+  text-align: center;
+  color: #9aa0aa;
+  font-size: 13px;
+  background: #fafbfc;
+  border-radius: 10px;
+  border: 1px dashed #e5e7eb;
+}
+
+@media (max-width: 600px) {
+  body { padding: 12px 10px 40px; }
+  .card { padding: 16px; border-radius: 12px; }
+  .course-row { grid-template-columns: 44px 1fr 1fr; }
+  .course-row .day-label { font-size: 12px; }
+  .slot-header { gap: 8px; }
+  .slot-header input[type="time"] { width: 90px; }
+  h1 { font-size: 19px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ========== 视图 1：加载文件 ========== -->
+  <section id="view-load" class="card">
+    <h1>课表编辑器</h1>
+    <p class="muted" style="margin-bottom: 20px;">
+      拖入你的 HTML 课表文件，就能可视化修改课程、教室、时间、颜色，改完一键下载新文件。
+      文件只在你的浏览器里处理，不会上传到任何服务器。
+    </p>
+    <div class="dropzone" id="dropzone">
+      <div class="icon">📁</div>
+      <div class="title">点击选择或拖入 HTML 文件</div>
+      <div class="hint">支持 .html / .htm 文件</div>
+      <input type="file" id="file-input" accept=".html,.htm,text/html" hidden>
+    </div>
+  </section>
+
+  <!-- ========== 视图 2：编辑 ========== -->
+  <section id="view-edit" hidden>
+
+    <!-- 顶部操作栏 -->
+    <div class="topbar" style="background:#fff; padding:16px 20px; border-radius:16px; margin-bottom:16px; box-shadow:0 4px 20px rgba(17,24,39,.07);">
+      <div class="file-info">
+        <strong id="file-info-name">—</strong>
+        <span id="file-info-count"></span>
+      </div>
+      <button class="secondary small" id="reload-btn">重新加载</button>
+    </div>
+
+    <!-- 基本信息 -->
+    <div class="card">
+      <h2>周次文字</h2>
+      <p class="muted" style="margin-bottom: 12px;">显示在顶部徽章里的文字，纯展示。</p>
+      <input type="text" id="week-input" placeholder="第 10–11 周" style="max-width: 280px;">
+    </div>
+
+    <!-- 星期设置 -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div>
+          <h2>星期设置</h2>
+          <p class="muted">顺序决定课表里每天的排列。删除某天会一并删掉那天的课。</p>
+        </div>
+        <button class="secondary small" id="add-day-btn">+ 添加星期</button>
+      </div>
+      <div id="days-list"></div>
+    </div>
+
+    <!-- 课程安排 -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div>
+          <h2>课程安排</h2>
+          <p class="muted">每个大节是一行。课程名留空 = 那天的这一节没课。</p>
+        </div>
+        <button class="secondary small" id="add-slot-btn">+ 添加大节</button>
+      </div>
+      <div id="slots-list"></div>
+    </div>
+
+    <!-- 课程颜色 -->
+    <div class="card">
+      <h2>课程颜色</h2>
+      <p class="muted" style="margin-bottom: 12px;">
+        改课程名后，新课程会自动分配一个颜色。想换色在这里选。
+      </p>
+      <div id="colors-list"></div>
+    </div>
+
+    <!-- 导出 -->
+    <div class="card">
+      <h2 style="margin-bottom: 12px;">导出</h2>
+      <div class="export-bar">
+        <input type="text" class="filename" id="filename" placeholder="文件名（不含 .html）">
+        <button id="export-btn">下载修改后的 HTML</button>
+      </div>
+      <p class="muted" style="margin-top: 12px;">
+        文件名如果留空，会使用「我的课表」。下载后直接替换原文件即可。
+      </p>
+    </div>
+
+  </section>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ============================================================
+     配置：可用的课程颜色
+     ============================================================ */
+  var COLOR_KEYS = ['pink', 'rose', 'orange', 'yellow', 'green', 'teal', 'blue', 'indigo', 'purple'];
+  var COLOR_NAMES = {
+    pink: '粉', rose: '玫红', orange: '橙', yellow: '黄',
+    green: '绿', teal: '青', blue: '蓝', indigo: '靛蓝', purple: '紫'
+  };
+  var COLOR_SWATCH = {
+    pink: '#8F2047', rose: '#8A1F1F', orange: '#7D3A06', yellow: '#644600',
+    green: '#15552A', teal: '#09574F', blue: '#123F9E', indigo: '#2E3290', purple: '#47228F'
+  };
+
+  /* ============================================================
+     全局状态
+     ============================================================ */
+  var state = {
+    html: '',           // 原始 HTML 全文
+    sch: null,          // 解析出的 SCHEDULE 对象
+    colors: null,       // 解析出的 COURSE_COLORS 对象
+    schInfo: null,      // { start, end, code } 位置信息
+    colorInfo: null,
+    originalName: ''
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ============================================================
+     ① 文件加载
+     ============================================================ */
+  var dropzone = $('dropzone');
+  var fileInput = $('file-input');
+
+  dropzone.addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', function (e) {
+    var f = e.target.files[0];
+    if (f) loadFile(f);
+  });
+  dropzone.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    dropzone.classList.add('dragover');
+  });
+  dropzone.addEventListener('dragleave', function () {
+    dropzone.classList.remove('dragover');
+  });
+  dropzone.addEventListener('drop', function (e) {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    var f = e.dataTransfer.files[0];
+    if (f) loadFile(f);
+  });
+
+  function loadFile(file) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        parseHtml(e.target.result, file.name);
+      } catch (err) {
+        alert('无法解析这个文件：\n\n' + err.message);
+        console.error(err);
+      }
+    };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  function parseHtml(html, filename) {
+    var schInfo = extractObjectLiteral(html, 'SCHEDULE');
+    if (!schInfo) throw new Error('找不到 var SCHEDULE = { ... } 定义');
+    var sch;
+    try {
+      sch = new Function('return (' + schInfo.code + ')')();
+    } catch (e) {
+      throw new Error('SCHEDULE 语法错误：' + e.message);
+    }
+
+    var colorInfo = extractObjectLiteral(html, 'COURSE_COLORS');
+    if (!colorInfo) throw new Error('找不到 var COURSE_COLORS = { ... } 定义');
+    var colors;
+    try {
+      colors = new Function('return (' + colorInfo.code + ')')();
+    } catch (e) {
+      throw new Error('COURSE_COLORS 语法错误：' + e.message);
+    }
+
+    if (!sch.days || !sch.slots) throw new Error('SCHEDULE 缺少 days 或 slots 字段');
+
+    state.html = html;
+    state.sch = sch;
+    state.colors = colors;
+    state.schInfo = schInfo;
+    state.colorInfo = colorInfo;
+    state.originalName = filename || '我的课表.html';
+
+    $('filename').value = state.originalName.replace(/\.html?$/i, '');
+    $('file-info-name').textContent = state.originalName;
+    $('file-info-count').textContent = ' · ' + sch.days.length + ' 天 · ' + sch.slots.length + ' 个大节';
+
+    $('view-load').hidden = true;
+    $('view-edit').hidden = false;
+
+    rebuildAll();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  /* 用括号计数提取 `var X = { ... }` 的对象字面量
+     正确处理字符串、注释、嵌套花括号 */
+  function extractObjectLiteral(html, varName) {
+    var re = new RegExp('(?:var|let|const)\\s+' + varName + '\\s*=\\s*');
+    var m = re.exec(html);
+    if (!m) return null;
+    var start = m.index + m[0].length;
+    while (start < html.length && /\s/.test(html[start])) start++;
+    if (html[start] !== '{') return null;
+    var result = extractBalanced(html, start);
+    if (!result) return null;
+    return { start: start, end: result.end, code: result.code };
+  }
+
+  function extractBalanced(str, startIdx) {
+    var depth = 0, i = startIdx;
+    var inStr = false, strCh = '';
+    var inLineComment = false, inBlockComment = false;
+    while (i < str.length) {
+      var ch = str[i], next = str[i + 1];
+      if (inLineComment) {
+        if (ch === '\n') inLineComment = false;
+      } else if (inBlockComment) {
+        if (ch === '*' && next === '/') { inBlockComment = false; i++; }
+      } else if (inStr) {
+        if (ch === '\\') { i++; }
+        else if (ch === strCh) { inStr = false; }
+      } else {
+        if (ch === '/' && next === '/') { inLineComment = true; i++; }
+        else if (ch === '/' && next === '*') { inBlockComment = true; i++; }
+        else if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; }
+        else if (ch === '{') depth++;
+        else if (ch === '}') {
+          depth--;
+          if (depth === 0) return { code: str.substring(startIdx, i + 1), end: i + 1 };
+        }
+      }
+      i++;
+    }
+    return null;
+  }
+
+  /* ============================================================
+     ② 重建 UI
+     ============================================================ */
+  function rebuildAll() {
+    syncColors();
+    $('week-input').value = state.sch.week || '';
+    rebuildDays();
+    rebuildSlots();
+    rebuildColors();
+  }
+
+  /* 确保 COURSE_COLORS 里包含所有出现过的课程，并删除不存在的课程 */
+  function syncColors() {
+    var allCourses = collectAllCourses();
+    var set = {};
+    allCourses.forEach(function (n) { set[n] = true; });
+
+    Object.keys(state.colors).forEach(function (k) {
+      if (!set[k]) delete state.colors[k];
+    });
+
+    allCourses.forEach(function (name) {
+      if (!state.colors[name]) state.colors[name] = pickUnusedColor();
+    });
+  }
+
+  function collectAllCourses() {
+    var seen = {}, list = [];
+    state.sch.slots.forEach(function (slot) {
+      Object.keys(slot.courses).forEach(function (day) {
+        var name = slot.courses[day] && slot.courses[day].name;
+        if (name && !seen[name]) { seen[name] = true; list.push(name); }
+      });
+    });
+    return list;
+  }
+
+  function pickUnusedColor() {
+    var used = {};
+    Object.keys(state.colors).forEach(function (k) { used[state.colors[k]] = true; });
+    for (var i = 0; i < COLOR_KEYS.length; i++) {
+      if (!used[COLOR_KEYS[i]]) return COLOR_KEYS[i];
+    }
+    return COLOR_KEYS[0];
+  }
+
+  /* ---------- 星期列表 ---------- */
+  function rebuildDays() {
+    var container = $('days-list');
+    container.innerHTML = '';
+    if (!state.sch.days.length) {
+      container.innerHTML = '<div class="empty-hint">还没有任何星期，点右上角「+ 添加星期」</div>';
+      return;
+    }
+    state.sch.days.forEach(function (day, idx) {
+      var row = document.createElement('div');
+      row.className = 'day-row';
+
+      var nameEl = document.createElement('span');
+      nameEl.className = 'day-name';
+      nameEl.textContent = day;
+      row.appendChild(nameEl);
+
+      var actions = document.createElement('div');
+      actions.className = 'actions';
+
+      var upBtn = mkBtn('↑', 'secondary small', function () { moveDay(idx, -1); });
+      upBtn.disabled = idx === 0;
+      var downBtn = mkBtn('↓', 'secondary small', function () { moveDay(idx, 1); });
+      downBtn.disabled = idx === state.sch.days.length - 1;
+      var delBtn = mkBtn('删除', 'danger small', function () { deleteDay(idx); });
+
+      actions.appendChild(upBtn);
+      actions.appendChild(downBtn);
+      actions.appendChild(delBtn);
+      row.appendChild(actions);
+
+      container.appendChild(row);
+    });
+  }
+
+  function moveDay(idx, delta) {
+    var days = state.sch.days;
+    var ni = idx + delta;
+    if (ni < 0 || ni >= days.length) return;
+    var t = days[idx]; days[idx] = days[ni]; days[ni] = t;
+    rebuildAll();
+  }
+
+  function deleteDay(idx) {
+    var day = state.sch.days[idx];
+    if (!confirm('删除「' + day + '」会一并删掉该天的所有课程，确定吗？')) return;
+    state.sch.days.splice(idx, 1);
+    state.sch.slots.forEach(function (slot) { delete slot.courses[day]; });
+    rebuildAll();
+  }
+
+  function addDay() {
+    var name = prompt('新星期的名字（例如：周六）：');
+    if (!name) return;
+    name = name.trim();
+    if (!name) return;
+    if (state.sch.days.indexOf(name) !== -1) {
+      alert('这个星期已经存在了');
+      return;
+    }
+    state.sch.days.push(name);
+    rebuildAll();
+  }
+
+  /* ---------- 大节列表 ---------- */
+  function rebuildSlots() {
+    var container = $('slots-list');
+    container.innerHTML = '';
+    if (!state.sch.slots.length) {
+      container.innerHTML = '<div class="empty-hint">还没有课程，点右上角「+ 添加大节」</div>';
+      return;
+    }
+    state.sch.slots.forEach(function (slot, idx) {
+      container.appendChild(buildSlotCard(slot, idx));
+    });
+  }
+
+  function buildSlotCard(slot, idx) {
+    var card = document.createElement('div');
+    card.className = 'slot-card';
+
+    /* 头部：时间 + 操作按钮 */
+    var header = document.createElement('div');
+    header.className = 'slot-header';
+
+    var title = document.createElement('span');
+    title.className = 'slot-title';
+    title.textContent = '第 ' + (idx + 1) + ' 节';
+    header.appendChild(title);
+
+    header.appendChild(makeTimeLabel('开始', slot.start, function (v) { slot.start = v; }));
+    header.appendChild(makeTimeLabel('结束', slot.end, function (v) { slot.end = v; }));
+
+    var actions = document.createElement('div');
+    actions.className = 'actions';
+    var upBtn = mkBtn('↑', 'secondary small', function () { moveSlot(idx, -1); });
+    upBtn.disabled = idx === 0;
+    var downBtn = mkBtn('↓', 'secondary small', function () { moveSlot(idx, 1); });
+    downBtn.disabled = idx === state.sch.slots.length - 1;
+    var delBtn = mkBtn('删除本节', 'danger small', function () { deleteSlot(idx); });
+    actions.appendChild(upBtn);
+    actions.appendChild(downBtn);
+    actions.appendChild(delBtn);
+    header.appendChild(actions);
+    card.appendChild(header);
+
+    /* 每天一行 */
+    state.sch.days.forEach(function (day) {
+      var course = slot.courses[day] || { name: '', loc: '' };
+      var row = document.createElement('div');
+      row.className = 'course-row';
+
+      var label = document.createElement('span');
+      label.className = 'day-label';
+      label.textContent = day;
+      row.appendChild(label);
+
+      var nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.placeholder = '课程名（留空 = 没课）';
+      nameInput.value = course.name || '';
+      nameInput.addEventListener('input', function () {
+        var v = nameInput.value.trim();
+        if (v) {
+          if (!slot.courses[day]) slot.courses[day] = { name: '', loc: '' };
+          slot.courses[day].name = v;
+          if (!slot.courses[day].loc) slot.courses[day].loc = locInput.value || '';
+        } else {
+          delete slot.courses[day];
+        }
+        syncColors();
+        rebuildColors();
+      });
+      row.appendChild(nameInput);
+
+      var locInput = document.createElement('input');
+      locInput.type = 'text';
+      locInput.placeholder = '教室（可空）';
+      locInput.value = course.loc || '';
+      locInput.addEventListener('input', function () {
+        if (slot.courses[day]) slot.courses[day].loc = locInput.value;
+      });
+      row.appendChild(locInput);
+
+      card.appendChild(row);
+    });
+
+    return card;
+  }
+
+  function makeTimeLabel(text, value, onChange) {
+    var label = document.createElement('label');
+    var span = document.createElement('span');
+    span.textContent = text;
+    label.appendChild(span);
+
+    var input = document.createElement('input');
+    input.type = 'time';
+    input.value = value || '';
+    input.addEventListener('input', function () { onChange(input.value); });
+    label.appendChild(input);
+
+    return label;
+  }
+
+  function moveSlot(idx, delta) {
+    var slots = state.sch.slots;
+    var ni = idx + delta;
+    if (ni < 0 || ni >= slots.length) return;
+    var t = slots[idx]; slots[idx] = slots[ni]; slots[ni] = t;
+    rebuildAll();
+  }
+
+  function deleteSlot(idx) {
+    if (!confirm('删除第 ' + (idx + 1) + ' 节？')) return;
+    state.sch.slots.splice(idx, 1);
+    rebuildAll();
+  }
+
+  function addSlot() {
+    var last = state.sch.slots[state.sch.slots.length - 1];
+    state.sch.slots.push({
+      start: last ? last.start : '08:00',
+      end:   last ? last.end   : '09:30',
+      courses: {}
+    });
+    rebuildAll();
+  }
+
+  /* ---------- 颜色列表 ---------- */
+  function rebuildColors() {
+    var container = $('colors-list');
+    container.innerHTML = '';
+    var courses = collectAllCourses();
+    if (!courses.length) {
+      container.innerHTML = '<div class="empty-hint">还没有课程，添加课程后这里会出现颜色选项</div>';
+      return;
+    }
+    courses.forEach(function (name) {
+      var color = state.colors[name] || 'blue';
+      var row = document.createElement('div');
+      row.className = 'color-row';
+
+      var nameWrap = document.createElement('div');
+      nameWrap.className = 'course-name';
+      var swatch = document.createElement('span');
+      swatch.className = 'color-swatch';
+      swatch.style.background = COLOR_SWATCH[color] || '#999';
+      nameWrap.appendChild(swatch);
+      nameWrap.appendChild(document.createTextNode(name));
+      row.appendChild(nameWrap);
+
+      var select = document.createElement('select');
+      COLOR_KEYS.forEach(function (k) {
+        var opt = document.createElement('option');
+        opt.value = k;
+        opt.textContent = COLOR_NAMES[k] + '（' + k + '）';
+        if (k === color) opt.selected = true;
+        select.appendChild(opt);
+      });
+      select.addEventListener('change', function () {
+        state.colors[name] = select.value;
+        swatch.style.background = COLOR_SWATCH[select.value];
+      });
+      row.appendChild(select);
+
+      container.appendChild(row);
+    });
+  }
+
+  function mkBtn(text, cls, handler) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = cls;
+    b.textContent = text;
+    b.addEventListener('click', handler);
+    return b;
+  }
+
+  /* ============================================================
+     ③ 事件绑定
+     ============================================================ */
+  $('add-day-btn').addEventListener('click', addDay);
+  $('add-slot-btn').addEventListener('click', addSlot);
+
+  $('week-input').addEventListener('input', function () {
+    state.sch.week = $('week-input').value;
+  });
+
+  $('reload-btn').addEventListener('click', function () {
+    if (!confirm('重新加载会丢失当前修改，确定吗？')) return;
+    state.html = '';
+    state.sch = null;
+    state.colors = null;
+    state.schInfo = null;
+    state.colorInfo = null;
+    $('file-input').value = '';
+    $('view-load').hidden = false;
+    $('view-edit').hidden = true;
+  });
+
+  $('export-btn').addEventListener('click', function () {
+    try {
+      exportHtml();
+    } catch (err) {
+      alert('导出失败：\n\n' + err.message);
+      console.error(err);
+    }
+  });
+
+  /* ============================================================
+     ④ 导出：序列化数据，替换回原 HTML，触发下载
+     ============================================================ */
+  function exportHtml() {
+    // 校验时间
+    state.sch.slots.forEach(function (slot, i) {
+      if (!/^\d{2}:\d{2}$/.test(slot.start || '')) {
+        throw new Error('第 ' + (i + 1) + ' 节的开始时间格式不对（应为 HH:MM）');
+      }
+      if (!/^\d{2}:\d{2}$/.test(slot.end || '')) {
+        throw new Error('第 ' + (i + 1) + ' 节的结束时间格式不对（应为 HH:MM）');
+      }
+      if (slot.start >= slot.end) {
+        throw new Error('第 ' + (i + 1) + ' 节的开始时间必须早于结束时间');
+      }
+    });
+
+    var newSchCode = serializeSchedule(state.sch);
+    var newColorCode = serializeColors(state.colors);
+
+    // 从后往前替换，避免前面的替换影响后面的位置
+    var replacements = [
+      { start: state.schInfo.start, end: state.schInfo.end, code: newSchCode },
+      { start: state.colorInfo.start, end: state.colorInfo.end, code: newColorCode }
+    ].sort(function (a, b) { return b.start - a.start; });
+
+    var result = state.html;
+    replacements.forEach(function (r) {
+      result = result.substring(0, r.start) + r.code + result.substring(r.end);
+    });
+
+    var name = $('filename').value.trim() || '我的课表';
+    if (!/\.html?$/i.test(name)) name += '.html';
+    downloadFile(result, name);
+  }
+
+  function serializeSchedule(sch) {
+    var lines = [];
+    lines.push('{');
+    lines.push('    week: ' + q(sch.week || '') + ',');
+    lines.push('    days: [' + sch.days.map(q).join(', ') + '],');
+    lines.push('    slots: [');
+    sch.slots.forEach(function (slot, i) {
+      lines.push('      /* ===== 第 ' + (i + 1) + ' 节 ' + slot.start + '–' + slot.end + ' ===== */');
+      lines.push('      {');
+      lines.push('        start: ' + q(slot.start) + ',');
+      lines.push('        end:   ' + q(slot.end) + ',');
+      lines.push('        courses: {');
+      // 按 days 顺序输出，保证可读性
+      var validDays = sch.days.filter(function (d) { return slot.courses[d] && slot.courses[d].name; });
+      validDays.forEach(function (d, j) {
+        var c = slot.courses[d];
+        var comma = j < validDays.length - 1 ? ',' : '';
+        lines.push('          ' + q(d) + ': { name: ' + q(c.name) + ', loc: ' + q(c.loc || '') + ' }' + comma);
+      });
+      lines.push('        }');
+      lines.push('      }' + (i < sch.slots.length - 1 ? ',' : ''));
+    });
+    lines.push('    ]');
+    lines.push('  }');
+    return lines.join('\n');
+  }
+
+  function serializeColors(colors) {
+    var keys = Object.keys(colors);
+    if (!keys.length) return '{}';
+    var lines = ['{'];
+    keys.forEach(function (k, i) {
+      var comma = i < keys.length - 1 ? ',' : '';
+      lines.push('    ' + q(k) + ': ' + q(colors[k]) + comma);
+    });
+    lines.push('  }');
+    return lines.join('\n');
+  }
+
+  function q(s) {
+    return "'" + String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+  }
+
+  function downloadFile(content, filename) {
+    var blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+})();
+</script>
+</body>
+</html>

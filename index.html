@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-view="pc">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f5f6f8">
+<!-- ★ 浏览器标签页标题，可改成任意文字，不影响功能 -->
+<title>我的课表</title>
+
+<!-- 尽早决定视图，避免刷新时闪屏（不用改） -->
+<script>
+(function () {
+  try {
+    var KEY = 'schedule-view-mode';
+    var saved = localStorage.getItem(KEY) || 'auto';
+    if (saved !== 'pc' && saved !== 'mobile') saved = 'auto';
+    var ua = navigator.userAgent || '';
+    var isPhone = /Android|iPhone|iPod|Windows Phone|HarmonyOS|Mobile|BlackBerry|Opera Mini/i.test(ua);
+    var narrow = window.matchMedia('(max-width: 768px)').matches;
+    var view = saved === 'auto' ? ((isPhone || narrow) ? 'mobile' : 'pc') : saved;
+    document.documentElement.setAttribute('data-view', view);
+    document.documentElement.setAttribute('data-mode', saved);
+  } catch (e) {}
+})();
+</script>
+
+<style>
+/* ============================================================
+   1. 基础重置与主题变量
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+/* 让 conic-gradient 的角度可以动画化（光带旋转依赖它） */
+@property --angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+:root {
+  --bg:            #f5f6f8;
+  --surface:       #ffffff;
+  --surface-soft:  #fafbfc;
+  --text:          #1d1d1f;
+  --text-sub:      #6b7280;
+  --text-weak:     #9aa0aa;
+  --line:          #ecedf1;
+
+  /* ============================================================
+     ★★★ 课程色板（一般不用改）★★★
+     每门课的颜色由下面 9 组 --xxx-bg / --xxx-tx 决定：
+       -bg 是卡片底色
+       -tx 是文字 / 进度填充 / 高亮光晕的主色
+     想让某门课更深或更浅，改对应那组两个值即可。
+     注意：修改后课表卡片和顶部卡片会同步变化，不需要改 JS。
+     ============================================================ */
+  --pink-bg:   #FFE3EC;  --pink-tx:   #8F2047;
+  --rose-bg:   #FFE1E1;  --rose-tx:   #8A1F1F;
+  --orange-bg: #FFE8D2;  --orange-tx: #7D3A06;
+  --yellow-bg: #FFF1C2;  --yellow-tx: #644600;
+  --green-bg:  #DDF5E6;  --green-tx:  #15552A;
+  --teal-bg:   #D5F1EF;  --teal-tx:   #09574F;
+  --blue-bg:   #DDEBFF;  --blue-tx:   #123F9E;
+  --indigo-bg: #E0E4FF;  --indigo-tx: #2E3290;
+  --purple-bg: #EADFFF;  --purple-tx: #47228F;
+
+  /* 玻璃拟态常用（不用改） */
+  --glass-bg:     rgba(255, 255, 255, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.65);
+  --glass-shadow: 0 10px 30px rgba(17, 24, 39, 0.08),
+                  0 1px 2px rgba(17, 24, 39, 0.04),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+               "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* 柔和彩色光斑背景（不用改） */
+  background:
+    radial-gradient(1200px 700px at 6% -12%, rgba(224, 232, 255, 0.95), transparent 62%),
+    radial-gradient(1000px 600px at 50% 118%, rgba(226, 247, 238, 0.9), transparent 62%),
+    radial-gradient(1000px 600px at 102% -4%, rgba(255, 230, 240, 0.9), transparent 58%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+.app { width: 100%; max-width: 1040px; }
+
+.nojs {
+  padding: 32px 16px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-sub);
+}
+
+/* ============================================================
+   2. 顶部工具栏 & 视图切换（不用改）
+   ============================================================ */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-bottom: 14px;
+  padding: 0 2px;
+}
+
+.toolbar h1 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: .3px;
+}
+
+.week-badge {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  letter-spacing: .2px;
+  color: #4b5563;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px) saturate(150%);
+  -webkit-backdrop-filter: blur(10px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.switch {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(233, 235, 240, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 12px;
+}
+
+.switch button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  color: #5f6672;
+  padding: 8px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background-color .18s ease, color .18s ease, box-shadow .18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.switch button:hover { color: var(--text); }
+.switch button[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .12), 0 1px 1px rgba(0, 0, 0, .04);
+}
+.switch button:focus-visible {
+  outline: 2px solid #4a90e2;
+  outline-offset: 1px;
+}
+
+/* ============================================================
+   3. 课程卡片公共样式
+   ============================================================ */
+.c-card {
+  position: relative;              /* 供进度层 / 伪元素绝对定位 */
+  overflow: hidden;                /* 让进度层被圆角裁切 */
+  border-radius: 10px;
+  transition: transform .18s ease, box-shadow .18s ease;
+  background: var(--c-bg, transparent);
+}
+
+/* 卡片内的直接子元素全部抬到进度层之上 */
+.c-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.c-card .c-name,
+.c-card .c-loc { color: var(--c-tx, var(--text)); }
+
+.c-name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.c-loc {
+  font-size: 11.5px;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.c-name-wrapper {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.c-name-wrapper .c-name { min-width: 0; }
+
+/* ---------- 课程配色：颜色标识 → CSS 变量（不用改）---------- */
+.c-pink   { --c-bg: var(--pink-bg);   --c-tx: var(--pink-tx); }
+.c-rose   { --c-bg: var(--rose-bg);   --c-tx: var(--rose-tx); }
+.c-orange { --c-bg: var(--orange-bg); --c-tx: var(--orange-tx); }
+.c-yellow { --c-bg: var(--yellow-bg); --c-tx: var(--yellow-tx); }
+.c-green  { --c-bg: var(--green-bg);  --c-tx: var(--green-tx); }
+.c-teal   { --c-bg: var(--teal-bg);   --c-tx: var(--teal-tx); }
+.c-blue   { --c-bg: var(--blue-bg);   --c-tx: var(--blue-tx); }
+.c-indigo { --c-bg: var(--indigo-bg); --c-tx: var(--indigo-tx); }
+.c-purple { --c-bg: var(--purple-bg); --c-tx: var(--purple-tx); }
+
+/* ============================================================
+   3.2 ★ 卡片整体做进度条（不用改）
+   ------------------------------------------------------------
+   ::before 是进度填充层，宽度由 JS 每秒设置 --progress 控制。
+     · 普通卡片：--progress = 0，看不到填充层
+     · 即将到来 (.is-soon)：剩 60 分钟以内开始爬升，从 0% → 100%
+     · 正在上课 (.is-now) ：整节课进度，从 0% → 100%
+   填充色很淡，不会盖住文字。
+   ============================================================ */
+.c-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--progress, 0%);
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--c-tx) 5%, transparent),
+    color-mix(in srgb, var(--c-tx) 13%, transparent)
+  );
+  transition: width var(--progress-dur, 1s) linear;
+}
+
+/* 即将到来：柔和淡填充 */
+.c-card.is-soon::before {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--c-tx) 4%, transparent),
+    color-mix(in srgb, var(--c-tx) 11%, transparent)
+  );
+}
+
+/* 正在上课：更明显的填充色 */
+.c-card.is-now::before {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--c-tx) 11%, transparent),
+    color-mix(in srgb, var(--c-tx) 26%, transparent)
+  );
+}
+
+/* ---------- 即将到来：旋转光带描边 + 呼吸柔光 ---------- */
+.c-card.is-soon {
+  z-index: 2;
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--c-tx) 42%, transparent),
+    0 4px 14px -2px color-mix(in srgb, var(--c-tx) 34%, transparent),
+    0 0 30px -8px color-mix(in srgb, var(--c-tx) 40%, transparent);
+  animation: cardSoonBreath 3.4s ease-in-out infinite;
+}
+
+@keyframes cardSoonBreath {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--c-tx) 34%, transparent),
+      0 4px 14px -2px color-mix(in srgb, var(--c-tx) 28%, transparent),
+      0 0 26px -10px color-mix(in srgb, var(--c-tx) 32%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--c-tx) 54%, transparent),
+      0 4px 18px -2px color-mix(in srgb, var(--c-tx) 48%, transparent),
+      0 0 38px -6px color-mix(in srgb, var(--c-tx) 52%, transparent);
+  }
+}
+
+/* 旋转光带（贴在卡片边缘内侧） */
+.c-card.is-soon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--angle, 0deg),
+    transparent 0deg,
+    color-mix(in srgb, var(--c-tx) 12%, transparent) 30deg,
+    var(--c-tx) 90deg,
+    color-mix(in srgb, var(--c-tx) 12%, transparent) 150deg,
+    transparent 180deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 3;
+  animation: cardStrokeSpin 3.6s linear infinite;
+  opacity: 0.95;
+}
+
+@keyframes cardStrokeSpin {
+  to { --angle: 360deg; }
+}
+
+/* ---------- 正在上课：更强呼吸柔光 + 内发光 ---------- */
+.c-card.is-now {
+  z-index: 2;
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--c-tx) 55%, transparent),
+    0 4px 18px -2px color-mix(in srgb, var(--c-tx) 46%, transparent),
+    0 0 36px -6px color-mix(in srgb, var(--c-tx) 50%, transparent);
+  animation: cardNowBreath 2.4s ease-in-out infinite;
+}
+
+@keyframes cardNowBreath {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--c-tx) 48%, transparent),
+      0 4px 18px -2px color-mix(in srgb, var(--c-tx) 40%, transparent),
+      0 0 32px -8px color-mix(in srgb, var(--c-tx) 44%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--c-tx) 70%, transparent),
+      0 4px 22px -2px color-mix(in srgb, var(--c-tx) 56%, transparent),
+      0 0 48px -4px color-mix(in srgb, var(--c-tx) 62%, transparent);
+  }
+}
+
+.c-card.is-now::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+  box-shadow: inset 0 0 24px -8px color-mix(in srgb, var(--c-tx) 45%, transparent);
+}
+
+/* 高亮卡片的名字加重一点点 */
+.c-card.is-soon .c-name,
+.c-card.is-now .c-name {
+  font-weight: 700;
+}
+
+/* 状态切换时禁用宽度过渡，避免"倒退"动画 */
+.c-card.no-progress-transition::before,
+.next-card.no-progress-transition::after {
+  transition: none !important;
+}
+
+/* ============================================================
+   3.5 下节课提示卡（玻璃拟态 + 整体进度条，不用改）
+   ============================================================ */
+.next-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-bottom: 14px;
+  padding: 16px 20px 16px 24px;
+  /* 顶部高光合并到 background 里（原 ::after 让给进度层） */
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 50%),
+    var(--glass-bg);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+}
+
+/* 左侧课程色条 */
+.next-card::before {
+  content: "";
+  position: absolute;
+  left: 10px; top: 14px; bottom: 14px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--c-tx, #c9ced8);
+  opacity: .8;
+  z-index: 2;
+}
+
+/* 顶部卡片的整体进度填充层 */
+.next-card::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--progress, 0%);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--c-tx) 6%, transparent),
+    color-mix(in srgb, var(--c-tx) 16%, transparent)
+  );
+  pointer-events: none;
+  z-index: 0;
+  transition: width var(--progress-dur, 1s) linear;
+}
+
+.next-card.is-live::after {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--c-tx) 10%, transparent),
+    color-mix(in srgb, var(--c-tx) 22%, transparent)
+  );
+}
+
+.next-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.next-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.next-tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 6px 11px;
+  border-radius: 999px;
+  color: var(--c-tx, var(--text-sub));
+  background: var(--c-bg, rgba(255, 255, 255, 0.7));
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+}
+
+.next-card.is-live .next-tag::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%      { opacity: .35; transform: scale(.8); }
+}
+
+.next-info { min-width: 0; }
+
+.next-name {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.next-meta {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-sub);
+  word-break: break-word;
+  font-variant-numeric: tabular-nums;
+}
+
+.next-count {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.next-num {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 1px;
+  color: var(--c-tx, var(--text));
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5), 0 2px 8px rgba(17, 24, 39, 0.06);
+}
+
+.next-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-sub);
+}
+
+@media (max-width: 480px) {
+  .next-card { padding: 14px 16px 14px 20px; gap: 8px 12px; }
+  .next-name { font-size: 15px; }
+  .next-num  { font-size: 22px; letter-spacing: .5px; }
+  .next-tag  { padding: 5px 9px; font-size: 11.5px; }
+  .next-label{ font-size: 12px; }
+}
+
+/* ============================================================
+   4. 电脑端视图（网格表格，不用改）
+   ============================================================ */
+[data-view="pc"] .table-wrap {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 18px;
+  box-shadow:
+    0 10px 30px rgba(17, 24, 39, 0.07),
+    0 1px 2px rgba(17, 24, 39, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+[data-view="pc"] .modern-schedule { min-width: 680px; }
+
+[data-view="pc"] .sch-header,
+[data-view="pc"] .sch-row {
+  display: grid;
+  grid-template-columns: 112px repeat(5, minmax(0, 1fr));
+}
+
+[data-view="pc"] .sch-header {
+  background: rgba(250, 251, 252, 0.7);
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  text-align: center;
+}
+
+[data-view="pc"] .sch-header > div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 6px;
+  border-right: 1px solid var(--line);
+}
+[data-view="pc"] .sch-header > div:last-child { border-right: 0; }
+[data-view="pc"] .sch-header > div:first-child {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-sub);
+  background: rgba(245, 246, 248, 0.75);
+}
+
+[data-view="pc"] .sch-row {
+  background: rgba(255, 255, 255, 0.35);
+  border-bottom: 1px solid var(--line);
+}
+[data-view="pc"] .sch-row:last-child { border-bottom: 0; }
+
+[data-view="pc"] .sch-time {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 10px 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  white-space: nowrap;
+  color: var(--text-sub);
+  background: rgba(250, 251, 252, 0.7);
+  border-right: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-view="pc"] .sch-courses {
+  grid-column: span 5;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  padding: 7px;
+}
+
+[data-view="pc"] .c-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 66px;
+  padding: 12px 8px;
+  text-align: center;
+}
+[data-view="pc"] .c-name-wrapper { justify-content: center; }
+
+/* hover 只作用于"普通"卡片，避免与高亮效果打架 */
+[data-view="pc"] .c-card:not(.c-empty):not(.is-soon):not(.is-now):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(17, 24, 39, .10);
+}
+
+[data-view="pc"] .c-card.c-empty {
+  background: rgba(251, 252, 253, 0.6);
+  border: 1px dashed rgba(231, 234, 240, 0.9);
+}
+
+/* ============================================================
+   5. 手机端视图（按天分组，不用改）
+   ============================================================ */
+#schedule-mobile { display: none; }
+
+[data-view="mobile"] body {
+  padding: 12px 12px calc(24px + env(safe-area-inset-bottom, 0px));
+}
+
+[data-view="mobile"] .app { max-width: 640px; }
+
+[data-view="mobile"] #schedule-pc { display: none; }
+[data-view="mobile"] #schedule-mobile { display: block; }
+
+[data-view="mobile"] .toolbar { margin-bottom: 12px; }
+[data-view="mobile"] .switch button { padding: 7px 12px; font-size: 12.5px; }
+
+[data-view="mobile"] .day-card {
+  margin-bottom: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 18px;
+  box-shadow:
+    0 6px 20px rgba(17, 24, 39, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  overflow: hidden;
+}
+[data-view="mobile"] .day-card:last-child { margin-bottom: 0; }
+
+[data-view="mobile"] .day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 16px;
+  background: rgba(250, 251, 252, 0.6);
+  border-bottom: 1px solid rgba(240, 241, 244, 0.8);
+}
+
+[data-view="mobile"] .day-name {
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  color: var(--text);
+}
+[data-view="mobile"] .day-name::before {
+  content: "";
+  width: 3px;
+  height: 15px;
+  margin-right: 8px;
+  border-radius: 2px;
+  background: #c9ced8;
+}
+
+[data-view="mobile"] .day-count {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-sub);
+  background: rgba(236, 238, 243, 0.85);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+[data-view="mobile"] .day-list {
+  list-style: none;
+  padding: 6px 8px;
+}
+
+[data-view="mobile"] .day-item {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 6px 4px;
+}
+[data-view="mobile"] .day-item + .day-item {
+  border-top: 1px solid rgba(245, 246, 248, 0.9);
+}
+
+[data-view="mobile"] .day-time {
+  flex: none;
+  width: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-weak);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-view="mobile"] .day-item .c-card {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+}
+
+[data-view="mobile"] .day-item .c-name { font-size: 15px; }
+
+[data-view="mobile"] .day-item .c-loc {
+  flex: none;
+  max-width: 46%;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-view="mobile"] .day-empty {
+  padding: 20px 16px;
+  font-size: 13px;
+  color: var(--text-weak);
+  text-align: center;
+}
+
+@media (max-width: 360px) {
+  [data-view="mobile"] .day-time { width: 46px; font-size: 11px; }
+  [data-view="mobile"] .day-item .c-name { font-size: 14px; }
+  [data-view="mobile"] .day-item .c-loc { font-size: 12px; }
+  [data-view="mobile"] .switch button { padding: 7px 10px; font-size: 12px; }
+  .next-num { font-size: 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+
+  <!-- ===== 顶部：标题 + 视图切换 ===== -->
+  <header class="toolbar">
+    <!-- ★ "课程表" 三个字可改成任意标题，不影响功能 -->
+    <h1>课程表 <span class="week-badge" id="week-badge">第 10–11 周</span></h1>
+
+    <!-- 视图切换按钮（不用改） -->
+    <div class="switch" role="group" aria-label="视图切换">
+      <button type="button" data-mode="auto"   aria-pressed="true">自动</button>
+      <button type="button" data-mode="pc"     aria-pressed="false">电脑</button>
+      <button type="button" data-mode="mobile" aria-pressed="false">手机</button>
+    </div>
+  </header>
+
+  <!-- ===== 下节课提示卡（结构不用改，内容由 JS 自动填充） ===== -->
+  <section class="next-card" id="next-card">
+    <div class="next-left">
+      <span class="next-tag" id="next-tag">下节课</span>
+      <div class="next-info">
+        <div class="next-name" id="next-name">—</div>
+        <div class="next-meta" id="next-meta">—</div>
+      </div>
+    </div>
+    <div class="next-count">
+      <span class="next-num" id="next-num">—</span>
+      <span class="next-label" id="next-label"></span>
+    </div>
+  </section>
+
+  <!-- ===== 电脑端：网格视图（不用改） ===== -->
+  <div class="table-wrap" id="schedule-pc" role="region" aria-label="课表网格视图">
+    <div class="modern-schedule"></div>
+  </div>
+
+  <!-- ===== 手机端：按天分组视图（不用改） ===== -->
+  <div id="schedule-mobile" role="region" aria-label="课表按天视图"></div>
+
+  <noscript>
+    <p class="nojs">请开启 JavaScript 以显示课表。</p>
+  </noscript>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ============================================================
+     ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+
+     ★★★【平时你只需要改这一块】★★★ 课表数据
+
+     改这里 = 改课表。保存后刷新页面，PC / 手机视图和倒计时都会同步更新。
+
+     ─────────────────────────────────────────────────────────────
+     ★ 改动规则（违反会导致不显示或倒计时错乱，请逐条看）
+
+     【规则 1｜时间格式】必须写成 "HH:MM"，两位数，带前导零，英文冒号。
+        ✔ 正确："08:20"  "13:10"  "09:05"
+        ✘ 错误："8:20"（少零）  "13：10"（中文冒号）  "08:20:00"（带秒）
+        提示：只要格式正确，倒计时和进度条就一定准。
+
+     【规则 2｜星期名称】courses 的 key 必须是 "周一 / 周二 / 周三 /
+        周四 / 周五 / 周六 / 周日"，并且要和下面 days 数组里写的
+        名字一字不差。写 "星期一" 而 days 里是 "周一" 就永远找不到课。
+
+     【规则 3｜没课的那天】直接省略这一天的 key，不要写 null 或空对象。
+        例如周四大节没课 → 不要写 '周四': 这一行。
+
+     【规则 4｜起止时间】start / end 是这一大节的起止时间，
+        倒计时以 start 为基准，进度条以 start→end 为区间。
+
+     【规则 5｜新增课程】在 courses 里加 '周X': { name, loc } 即可；
+        新课程名记得看下方 COURSE_COLORS 配色表（不加也能显示，
+        会用课程名自动哈希一个稳定颜色，只是可能不合心意）。
+
+     【规则 6｜增删大节】数组顺序 = 从上到下的展示顺序；
+        新增一大节时，在上一块 } 后面补英文逗号 ,
+        再照抄一个 { start, end, courses } 结构。
+
+     【规则 7｜只改文字】只改课程名 / 教室 / 时间 / 周次文字，
+        不要动代码结构和符号，所有功能都会自动跟随。
+     ─────────────────────────────────────────────────────────────
+     ============================================================ */
+  var SCHEDULE = {
+
+    /* ---- ★ 顶部"第 X–Y 周"徽章文字，纯展示，随便改 ---- */
+    week: '第 10–11 周',
+
+    /* ---- ★ 显示哪几天 + 显示顺序 ----
+       PC 视图从左到右按此顺序排列，手机视图从上到下按此顺序排列。
+       名字必须和 courses 里的 key 完全一致。 */
+    days: ['周一', '周二', '周三', '周四', '周五'],
+
+    /* ---- ★ 每一大节，数组顺序 = 从上到下 ----
+       单个元素结构：
+       {
+         start: 'HH:MM',   // 本节开始（倒计时 / 进度以此为准）
+         end:   'HH:MM',   // 本节结束
+         courses: {        // 本节内每天的课
+           '周一': { name: '课程名', loc: '教室' },  // loc 写 '' = 不显示教室
+           ...
+         }
+       } */
+    slots: [
+
+      /* ============ 第 1 大节 08:20–09:55 ============ */
+      {
+        start: '08:20',   // ★ 改这里 → 本节开始时间（必须 "HH:MM"）
+        end:   '09:55',   // ★ 改这里 → 本节结束时间（必须 "HH:MM"）
+        courses: {
+          '周一': { name: '现代史', loc: '9 楼东阶梯' },  // ★ 改课程名 / 教室
+          '周二': { name: '英语',   loc: '301'        },  // ★ 改课程名 / 教室
+          '周三': { name: '现代史', loc: '9 楼东阶梯' },  // ★ 改课程名 / 教室
+          '周五': { name: '导论',   loc: '6 楼东阶梯' }   // ★ 改课程名 / 教室
+          // 周四这一节没课 → 直接省略 '周四' 这个 key（不要写 null）
+        }
+      },
+
+      /* ============ 第 2 大节 10:25–12:00 ============ */
+      {
+        start: '10:25',
+        end:   '12:00',
+        courses: {
+          '周一': { name: '高数', loc: '2 楼西阶梯' },  // ★ 改课程名 / 教室
+          '周二': { name: '电信', loc: 'D403'        },  // ★ 改课程名 / 教室
+          '周三': { name: '高数', loc: '2 楼西阶梯' },  // ★ 改课程名 / 教室
+          '周四': { name: '韩语', loc: 'A506'        },  // ★ 改课程名 / 教室
+          '周五': { name: '高数', loc: '2 楼西阶梯' }   // ★ 改课程名 / 教室
+        }
+      },
+
+      /* ============ 第 3 大节 13:10–14:45 ============ */
+      {
+        start: '13:10',
+        end:   '14:45',
+        courses: {
+          '周一': { name: '韩语', loc: 'A506'        },  // ★ 改课程名 / 教室
+          '周二': { name: '导论', loc: '6 楼东阶梯' },  // ★ 改课程名 / 教室
+          '周四': { name: '体育', loc: ''            },  // ★ loc 空字符串 = 不显示教室
+          '周五': { name: '电信', loc: 'D403'        }   // ★ 改课程名 / 教室
+        }
+      },
+
+      /* ============ 第 4 大节 15:05–16:40 ============ */
+      {
+        start: '15:05',
+        end:   '16:40',
+        courses: {
+          '周二': { name: '人工智能', loc: 'D603' },  // ★ 改课程名 / 教室
+          '周五': { name: '人工智能', loc: 'D603' }   // ★ 改课程名 / 教室
+        }
+      },
+
+      /* ============ 第 5 大节 17:40–19:15 ============ */
+      {
+        start: '17:40',
+        end:   '19:15',
+        courses: {
+          '周一': { name: '韩语听说', loc: 'A504' }  // ★ 改课程名 / 教室
+        }
+      }
+
+      /* ★ 新增一大节：在最后一个 } 后面加英文逗号，
+         再照抄一个 { start, end, courses } 结构。 */
+    ]
+  };
+  /* ★★★★★★★★★★★★★★★★★★ 课表数据块结束 ★★★★★★★★★★★★★★★★★★ */
+
+
+  /* ============================================================
+     ★★★ 课程配色表：一门课 = 一种固定颜色 ★★★
+
+     key   = 课程名（必须和上面 SCHEDULE 里的 name 一字不差）
+     value = 颜色标识，只能从下面 9 个里挑：
+             pink / rose / orange / yellow / green / teal / blue / indigo / purple
+
+     ▸ 新增一门课：在这里加一行 '新课程名': 'blue',
+     ▸ 不加也能用：会用课程名自动哈希出一个稳定颜色。
+     ▸ 想换某门课颜色：把冒号后面的颜色标识换掉即可。
+     ============================================================ */
+  var COURSE_COLORS = {
+    '现代史':   'blue',     // ★ 课程名 : 颜色
+    '英语':     'purple',
+    '导论':     'orange',
+    '高数':     'indigo',
+    '电信':     'pink',
+    '韩语':     'green',
+    '体育':     'teal',
+    '人工智能': 'rose',
+    '韩语听说': 'yellow'
+    /* ★ 在这里加新课程，例如：
+       '新课程名': 'blue',   ← 末尾英文逗号别漏 */
+  };
+
+  /* 可用颜色标识列表（自动哈希兜底用，不用改） */
+  var COLOR_KEYS = ['pink', 'rose', 'orange', 'yellow', 'green', 'teal', 'blue', 'indigo', 'purple'];
+
+  /* 取某门课的颜色：先查 COURSE_COLORS，查不到就按课程名稳定哈希 */
+  function courseColor(course) {
+    var name = (course && course.name) || '';
+    if (Object.prototype.hasOwnProperty.call(COURSE_COLORS, name)) {
+      return COURSE_COLORS[name];
+    }
+    var h = 0;
+    for (var i = 0; i < name.length; i++) {
+      h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    }
+    /* 兜底：即使 COLOR_KEYS 被清空也不会崩溃 */
+    return COLOR_KEYS[h % COLOR_KEYS.length] || 'blue';
+  }
+
+  /* ============================================================
+     ③ 渲染课表（不用改）
+     ------------------------------------------------------------
+     renderPC()     → 电脑端网格视图：大节成行，星期成列
+     renderMobile() → 手机端按天视图：每天一张卡片，下面依次是课节
+     两者都通过 data-key="周X|HH:MM" 标记卡片，
+     供后续高亮定位使用（格式不要改）。
+     ============================================================ */
+
+  function renderPC() {
+    var days = SCHEDULE.days;
+    var html = '<div class="sch-header"><div>时间</div>';
+    days.forEach(function (d) { html += '<div>' + d + '</div>'; });
+    html += '</div>';
+
+    SCHEDULE.slots.forEach(function (slot) {
+      html += '<div class="sch-row">';
+      html += '<div class="sch-time">' + slot.start + '–' + slot.end + '</div>';
+      html += '<div class="sch-courses">';
+
+      days.forEach(function (day) {
+        var c = slot.courses[day];
+        if (c) {
+          var cardKey = day + '|' + slot.start;
+          html += '<div class="c-card c-' + courseColor(c) + '" data-key="' + cardKey + '">' +
+                    '<div class="c-name-wrapper"><span class="c-name">' + c.name + '</span></div>' +
+                    (c.loc ? '<span class="c-loc">' + c.loc + '</span>' : '') +
+                  '</div>';
+        } else {
+          html += '<div class="c-card c-empty" aria-hidden="true"></div>';
+        }
+      });
+
+      html += '</div></div>';
+    });
+
+    document.querySelector('#schedule-pc .modern-schedule').innerHTML = html;
+  }
+
+  function renderMobile() {
+    var html = '';
+
+    SCHEDULE.days.forEach(function (day) {
+      var items = [];
+      SCHEDULE.slots.forEach(function (slot) {
+        var c = slot.courses[day];
+        if (c) items.push({ start: slot.start, end: slot.end, course: c });
+      });
+
+      if (!items.length) {
+        html += '<section class="day-card">' +
+                  '<header class="day-head">' +
+                    '<h2 class="day-name">' + day + '</h2>' +
+                    '<span class="day-count">无课</span>' +
+                  '</header>' +
+                  '<p class="day-empty">今天没有课 🎉</p>' +
+                '</section>';
+        return;
+      }
+
+      html += '<section class="day-card">';
+      html += '  <header class="day-head">' +
+                '    <h2 class="day-name">' + day + '</h2>' +
+                '    <span class="day-count">' + items.length + ' 节</span>' +
+                '  </header>';
+      html += '  <ul class="day-list">';
+
+      items.forEach(function (it) {
+        var cardKey = day + '|' + it.start;
+        html += '<li class="day-item">' +
+                  '<span class="day-time">' + it.start + '<br>' + it.end + '</span>' +
+                  '<div class="c-card c-' + courseColor(it.course) + '" data-key="' + cardKey + '">' +
+                    '<span class="c-name">' + it.course.name + '</span>' +
+                    (it.course.loc ? '<span class="c-loc">' + it.course.loc + '</span>' : '') +
+                  '</div>' +
+                '</li>';
+      });
+
+      html += '  </ul>';
+      html += '</section>';
+    });
+
+    document.getElementById('schedule-mobile').innerHTML = html;
+  }
+
+  function renderWeek() {
+    var badge = document.getElementById('week-badge');
+    if (badge && SCHEDULE.week) badge.textContent = SCHEDULE.week;
+  }
+
+  /* ============================================================
+     ③.5 进度计算 + 高亮索引（不用改）
+     ------------------------------------------------------------
+     进度规则：
+       · 正在上课 (is-now)：已上课时间 / 总时长 × 100%
+       · 即将到来 (is-soon)：上课前 60 分钟窗口内，
+         距离上课越近进度越大；剩 0 分钟 = 100%（瞬间切到 is-now 归 0）
+       · 其它情况（明天/更远的课）：0%（只有光带 + 柔光，不显示进度）
+     ============================================================ */
+  var SOON_WINDOW_MS = 60 * 60 * 1000;   /* 即将到来进度条开始爬升的窗口 */
+
+  function calcProgress(ev, now, isNow) {
+    if (!ev) return 0;
+    if (isNow) {
+      var total = ev.endDate - ev.startDate;
+      var elapsed = now - ev.startDate;
+      if (total <= 0) return 0;
+      return Math.max(0, Math.min(100, (elapsed / total) * 100));
+    }
+    var remainMs = ev.startDate - now;
+    if (remainMs > 0 && remainMs <= SOON_WINDOW_MS) {
+      return (1 - remainMs / SOON_WINDOW_MS) * 100;
+    }
+    return 0;
+  }
+
+  var cardIndex = {};       /* "周X|HH:MM" -> [PC 卡, 手机卡] */
+  var lastHiEls = [];       /* 当前已加高亮的元素 */
+  var lastHiKey = '';       /* 上次的高亮标识，用于判断状态是否变化 */
+
+  /* 渲染完成后调用一次：把所有带 data-key 的卡片按 key 分组 */
+  function buildCardIndex() {
+    cardIndex = {};
+    var els = document.querySelectorAll('.c-card[data-key]');
+    for (var i = 0; i < els.length; i++) {
+      var k = els[i].getAttribute('data-key');
+      (cardIndex[k] || (cardIndex[k] = [])).push(els[i]);
+    }
+  }
+
+  /* 应用高亮 + 进度到课表卡片
+     - 状态切换时：清旧、加新，并临时禁用过渡防止"倒退"动画
+     - 状态不变时：只更新 --progress，1s 平滑推进
+     注意：修复了旧元素 no-progress-transition 残留的问题 */
+  function applyHighlight(ev, isNow, now) {
+    var newKey = ev ? (ev.dayName + '|' + ev.slot.start + (isNow ? '|now' : '|soon')) : '';
+    var stateChanged = newKey !== lastHiKey;
+    var pct = calcProgress(ev, now, isNow);
+
+    if (stateChanged) {
+      var toClear = lastHiEls.slice();   /* 旧元素快照 */
+      var toAdd = [];                    /* 新元素 */
+
+      /* 1) 清除旧高亮（临时禁用过渡，宽度瞬间归 0） */
+      for (var i = 0; i < toClear.length; i++) {
+        toClear[i].classList.add('no-progress-transition');
+        toClear[i].classList.remove('is-soon', 'is-now');
+        toClear[i].style.removeProperty('--progress');
+      }
+      lastHiEls = [];
+      lastHiKey = newKey;
+
+      /* 2) 给新课程卡片加状态 + 初始进度 */
+      if (ev) {
+        var key = ev.dayName + '|' + ev.slot.start;
+        var list = cardIndex[key];
+        if (list && list.length) {
+          var cls = isNow ? 'is-now' : 'is-soon';
+          for (var j = 0; j < list.length; j++) {
+            var el = list[j];
+            el.classList.add(cls, 'no-progress-transition');
+            el.style.setProperty('--progress', pct.toFixed(2) + '%');
+            toAdd.push(el);
+            lastHiEls.push(el);
+          }
+        }
+      }
+
+      /* 3) 强制重排，让上面的赋值在"无过渡"状态下立即生效 */
+      if (toClear.length) void toClear[0].offsetWidth;
+      if (toAdd.length)   void toAdd[0].offsetWidth;
+
+      /* 4) 移除 no-progress-transition（旧 + 新都要移除，防止残留） */
+      for (var k = 0; k < toClear.length; k++) {
+        toClear[k].classList.remove('no-progress-transition');
+      }
+      for (var m = 0; m < toAdd.length; m++) {
+        toAdd[m].classList.remove('no-progress-transition');
+      }
+      return;
+    }
+
+    /* 状态没变：只更新进度（每秒一次，1s 平滑过渡） */
+    if (lastHiEls.length) {
+      var pctStr = pct.toFixed(2) + '%';
+      for (var n = 0; n < lastHiEls.length; n++) {
+        lastHiEls[n].style.setProperty('--progress', pctStr);
+      }
+    }
+  }
+
+  /* ============================================================
+     ④ 下节课提示卡（倒计时 + 顶部进度条）
+     ------------------------------------------------------------
+     · 每秒调用一次 updateNextCard()
+     · 找"下一节尚未结束的课"
+     · 正在上课时倒计时目标变为"下课时间"，并加上 is-live
+     · 顶部卡片进度和课表卡片进度完全同步
+     ============================================================ */
+  var DOW_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  /* ↑ 这是 JS Date.getDay() 的返回值顺序，改课表千万不要动这里！ */
+
+  /* "HH:MM" → 当天第几分钟 */
+  function toMin(hhmm) {
+    var p = String(hhmm).split(':');
+    return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0);
+  }
+
+  /* 从今天往后最多 7 天，找"下一节尚未结束的课" */
+  function findNextEvent(now) {
+    var todayIdx = now.getDay();
+    var best = null;
+
+    for (var off = 0; off <= 7; off++) {
+      var dow = (todayIdx + off) % 7;
+      var dayName = DOW_NAMES[dow];
+
+      for (var i = 0; i < SCHEDULE.slots.length; i++) {
+        var slot = SCHEDULE.slots[i];
+        var c = slot.courses[dayName];
+        if (!c) continue;
+
+        var sMin = toMin(slot.start);
+        var eMin = toMin(slot.end);
+        var sd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + off,
+                          Math.floor(sMin / 60), sMin % 60, 0, 0);
+        var ed = new Date(now.getFullYear(), now.getMonth(), now.getDate() + off,
+                          Math.floor(eMin / 60), eMin % 60, 0, 0);
+
+        if (ed <= now) continue;       /* 已下课 → 跳过 */
+        if (!best || sd < best.startDate) {
+          best = {
+            startDate: sd,
+            endDate: ed,
+            course: c,
+            slot: slot,
+            dayName: dayName,
+            dayOffset: off
+          };
+        }
+      }
+
+      if (best) break;                 /* 今天已有候选，不再看后面几天 */
+    }
+
+    return best;
+  }
+
+  /* 秒级倒计时格式化：HH:MM:SS；超过 1 天前面加 "N天 " */
+  function fmtCountdown(ms) {
+    if (ms < 0) ms = 0;
+    var totalSec = Math.floor(ms / 1000);
+    var days  = Math.floor(totalSec / 86400);
+    var hours = Math.floor((totalSec % 86400) / 3600);
+    var mins  = Math.floor((totalSec % 3600) / 60);
+    var secs  = totalSec % 60;
+
+    var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+    var t = pad(hours) + ':' + pad(mins) + ':' + pad(secs);
+    return days > 0 ? days + '天 ' + t : t;
+  }
+
+  var nextCardEl  = document.getElementById('next-card');
+  var nextTagEl   = document.getElementById('next-tag');
+  var nextNameEl  = document.getElementById('next-name');
+  var nextMetaEl  = document.getElementById('next-meta');
+  var nextNumEl   = document.getElementById('next-num');
+  var nextLabelEl = document.getElementById('next-label');
+  var lastCardKey = '';       /* 用于跳过完全无变化的 DOM 更新 */
+  var lastStateSig = '';      /* 用于判断顶部卡片是否需要"瞬间设置进度" */
+
+  function updateNextCard() {
+    var now = new Date();
+    var ev = findNextEvent(now);
+    var isNow = false;
+    var data;
+
+    if (!ev) {
+      data = {
+        cls:   'next-card',
+        live:  false,
+        tag:   '暂无课程',
+        name:  '没有更多课程',
+        meta:  '休息一下吧 ☕',
+        num:   '—',
+        label: ''
+      };
+    } else {
+      isNow = now >= ev.startDate && now < ev.endDate;
+      var color = courseColor(ev.course);
+
+      var meta = ev.slot.start + '–' + ev.slot.end;
+      if (ev.course.loc) meta += ' · ' + ev.course.loc;
+      if (ev.dayOffset === 1) meta = '明天 · ' + meta;
+      else if (ev.dayOffset > 1) meta = ev.dayName + ' · ' + meta;
+
+      var target = isNow ? ev.endDate : ev.startDate;
+      var diff = target - now;
+
+      data = {
+        cls:   'next-card c-' + color,
+        live:  isNow,
+        tag:   isNow ? '正在上课' : '下节课',
+        name:  ev.course.name,
+        meta:  meta,
+        num:   fmtCountdown(diff),
+        label: isNow ? '后下课' : '后开始'
+      };
+    }
+
+    /* ★ 顶部卡片进度条
+       用 stateSig 判断"课程或状态是否发生变化"：
+         变化 → 瞬间设置进度（禁用过渡，防止从 100% 倒退到 0%）
+         没变 → 每秒更新进度（保留 1s 平滑过渡） */
+    var nextPct = calcProgress(ev, now, isNow);
+    var stateSig = (data.name || '') + '|' + data.live + '|' + (data.meta || '');
+    var needInstant = (lastStateSig === '') || (stateSig !== lastStateSig);
+
+    if (needInstant) {
+      nextCardEl.classList.add('no-progress-transition');
+      nextCardEl.style.setProperty('--progress', nextPct.toFixed(2) + '%');
+      void nextCardEl.offsetWidth;
+      nextCardEl.classList.remove('no-progress-transition');
+      lastStateSig = stateSig;
+    } else {
+      nextCardEl.style.setProperty('--progress', nextPct.toFixed(2) + '%');
+    }
+
+    /* 同步课表卡片高亮 + 进度 */
+    applyHighlight(ev, isNow, now);
+
+    /* 文字 / 样式完全没变就跳过重绘，减少闪烁 */
+    var key = [data.cls, data.live, data.tag, data.name, data.meta, data.num, data.label].join('|');
+    if (key === lastCardKey) return;
+    lastCardKey = key;
+
+    nextCardEl.className = data.cls + (data.live ? ' is-live' : '');
+    nextTagEl.textContent   = data.tag;
+    nextNameEl.textContent  = data.name;
+    nextMetaEl.textContent  = data.meta;
+    nextNumEl.textContent   = data.num;
+    nextLabelEl.textContent = data.label;
+  }
+
+  /* 每秒刷新；页面切到后台自动暂停，回到前台立刻恢复（不用改） */
+  var nextTimer = setInterval(updateNextCard, 1000);
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      clearInterval(nextTimer);
+      nextTimer = null;
+    } else if (!nextTimer) {
+      updateNextCard();
+      nextTimer = setInterval(updateNextCard, 1000);
+    }
+  });
+
+  /* ============================================================
+     ⑤ 视图切换（不用改）
+     ============================================================ */
+  var root    = document.documentElement;
+  var KEY     = 'schedule-view-mode';
+  var buttons = Array.prototype.slice.call(document.querySelectorAll('.switch button'));
+  var mq      = window.matchMedia('(max-width: 768px)');
+
+  function detect() {
+    var ua = navigator.userAgent || '';
+    var isPhone = /Android|iPhone|iPod|Windows Phone|HarmonyOS|Mobile|BlackBerry|Opera Mini/i.test(ua);
+    return (isPhone || mq.matches) ? 'mobile' : 'pc';
+  }
+
+  function getMode() {
+    var m = null;
+    try { m = localStorage.getItem(KEY); } catch (e) {}
+    return (m === 'pc' || m === 'mobile') ? m : 'auto';
+  }
+
+  function render(mode) {
+    root.setAttribute('data-view', mode === 'auto' ? detect() : mode);
+    root.setAttribute('data-mode', mode);
+    buttons.forEach(function (b) {
+      b.setAttribute('aria-pressed', b.dataset.mode === mode ? 'true' : 'false');
+    });
+  }
+
+  buttons.forEach(function (b) {
+    b.addEventListener('click', function () {
+      var mode = b.dataset.mode;
+      try { localStorage.setItem(KEY, mode); } catch (e) {}
+      render(mode);
+    });
+  });
+
+  var onChange = function () { if (getMode() === 'auto') render('auto'); };
+  if (mq.addEventListener) { mq.addEventListener('change', onChange); }
+  else if (mq.addListener) { mq.addListener(onChange); }
+
+  /* ============================================================
+     ⑥ 初始化（不用改）
+     ------------------------------------------------------------
+     顺序很重要：
+       1. renderWeek()       → 填顶部周次
+       2. renderPC()         → 填电脑视图
+       3. renderMobile()     → 填手机视图
+       4. buildCardIndex()   → 建立 data-key 索引（必须在渲染之后）
+       5. updateNextCard()   → 首次倒计时 + 高亮
+       6. render(getMode())  → 设置初始视图
+     ============================================================ */
+  renderWeek();
+  renderPC();
+  renderMobile();
+  buildCardIndex();
+  updateNextCard();
+  render(getMode());
+})();
+</script>
+</body>
+</html>
