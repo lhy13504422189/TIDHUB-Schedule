@@ -364,7 +364,7 @@ PC 网格列数写死在 CSS 中。搜索 `repeat(5, minmax(0, 1fr))` 和 `grid-
 
 ## License
 
-Apache License 2.0。详见 [LICENSE](LICENSE)。
+Apache License 2.0。详见 LICENSE
 
 ---
 
