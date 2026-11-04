@@ -1,6 +1,6 @@
 # TIDHUB Schedule · 潮汐课表
 
-一个单文件、零依赖的课程表，附带可视化编辑器。
+一个单文件、零依赖的课程表，附带可视化编辑器。预览请前往t.tidhub.pw
 
 纯 HTML + CSS + 原生 JavaScript。无构建步骤，无 npm，无 CDN。保存后直接在浏览器打开即可使用。
 
